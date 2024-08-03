@@ -14,7 +14,7 @@
 		container.appendChild(svg);
 
 		const viewBox = svg.getAttribute("viewBox").split(" ").map(parseFloat);
-		const vmin = Math.min(viewBox[2], viewBox[3]);
+		const vmax = Math.max(viewBox[2], viewBox[3]);
 
 		const lineLayer = svg.g();
 		segments.forEach(({ segment, assignment }) => {
@@ -22,26 +22,29 @@
 				case "M": lineLayer.line(segment)
 					.stroke("black")
 					.strokeLinecap("round")
-					.strokeDasharray(`${vmin * 0.04} ${vmin * 0.04} ${vmin * 0.001} ${vmin * 0.04}`)
-					.strokeWidth(vmin * 0.02);
+					.strokeDasharray(`${vmax * 0.04} ${vmax * 0.04} ${vmax * 0.001} ${vmax * 0.04}`)
+					.strokeWidth(vmax * 0.02);
 				break;
 				case "V": lineLayer.line(segment)
 					.stroke("black")
 					.strokeLinecap("round")
-					.strokeDasharray(`${vmin * 0.04} ${vmin * 0.04}`)
-					.strokeWidth(vmin * 0.02);
+					.strokeDasharray(`${vmax * 0.04} ${vmax * 0.04}`)
+					.strokeWidth(vmax * 0.02);
 				break;
 				case "F": lineLayer.line(segment)
 					.stroke("black")
 					.strokeLinecap("round")
-					.strokeDasharray(`${vmin * 0.001} ${vmin * 0.04}`)
-					.strokeWidth(vmin * 0.02);
+					.strokeDasharray(`${vmax * 0.001} ${vmax * 0.04}`)
+					.strokeWidth(vmax * 0.02);
 				break;
 				default: break;
 			}
 		});
 
-		const arrowLayer = svg.g().stroke("black").fill("black");
+		const arrowLayer = svg.g()
+			.strokeWidth(vmax * 0.02)
+			.stroke("black")
+			.fill("black");
 		arrows.forEach(arrow => arrowLayer.arrow(arrow));
 	});
 </script>

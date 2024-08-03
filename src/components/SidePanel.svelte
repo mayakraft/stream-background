@@ -15,15 +15,16 @@
 
 	const optionsFolded = {
 		faces: {
-			front: { fill: "#7ae" },
-			back: { fill: "#ddd" },
+			front: { fill: "#ddd" },
+			back: { fill: "#7ae" },
 		},
 		strokeWidth: 0.005,
 	};
 </script>
 
 <div class="container">
-	<h3 class="center">🪷🍄🌱🌷</h3>
+	<!-- <h3 class="center">exper-ori-ments</h3> -->
+	<!-- <h3 class="center">algo-origami</h3> -->
 	<h5>{stepNumber}</h5>
 	<Origami
 		Fold={$FoldedForm}

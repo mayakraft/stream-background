@@ -2,7 +2,10 @@ import { get, writable, derived } from "svelte/store";
 import ear from "rabbit-ear";
 import { type FOLD } from "rabbit-ear/types.js";
 import { makeSequence } from "../origami/sequence.ts";
-import { Language } from "./App.ts";
+import { type AxiomParams, type AxiomDef, type DiagramFrame } from "../types.ts";
+// import { Language } from "./App.ts";
+
+export const Language = writable<string>("en");
 
 export const DESIRED_STEPS = 8;
 const STEP_DURATION = 4 * 1000; // 4 seconds
@@ -66,10 +69,10 @@ export const FoldedForm = derived(
 	{},
 );
 
-export const DiagramInfo = derived(
-	[FoldedForm],
-	([$FoldedForm]) => $FoldedForm["ear:diagram"] ? $FoldedForm["ear:diagram"] : {},
-	{},
+export const DiagramInfo = derived<typeof FoldedForm, DiagramFrame>(
+	FoldedForm,
+	($FoldedForm) => $FoldedForm["ear:diagram"],
+	undefined,
 );
 
 const AssignText = {
@@ -80,11 +83,10 @@ const AssignText = {
 	}
 };
 
-export const DiagramInstructions = derived(
+export const DiagramInstructions = derived<[typeof DiagramInfo, typeof Language], string[]>(
 	[DiagramInfo, Language],
 	([$DiagramInfo, $Language]) => {
-		// console.log($DiagramInfo);
-		if ($DiagramInfo.axiom === undefined) { return []; }
+		if (!$DiagramInfo || $DiagramInfo.axiom === undefined) { return []; }
 		const assignmentInstruction = AssignText[$Language][$DiagramInfo.assignment]
 		const axiomInstruction = ear.text.axioms[$Language][$DiagramInfo.axiom];
 		return [assignmentInstruction, axiomInstruction];
@@ -95,8 +97,9 @@ export const DiagramInstructions = derived(
 export const DiagramLines = derived(
 	[DiagramInfo],
 	([$DiagramInfo]) => {
-		if ($DiagramInfo.segment === undefined) { return []; }
-		const { segment, assignment } = $DiagramInfo;
+		if (!$DiagramInfo || $DiagramInfo.result === undefined) { return []; }
+		const { result: { segment }, assignment } = $DiagramInfo;
+		if (!segment) { return []; }
 		try {
 			return [{ segment, assignment }];
 		} catch (error) {
@@ -106,27 +109,46 @@ export const DiagramLines = derived(
 	[],
 );
 
+const getAxiomArrow = (graph: FOLD, axiom: number, params: AxiomParams, assignment: string) => {
+	let arrows: object[] = [];
+	try {
+		const { points, lines, index } = params;
+		switch (axiom) {
+			case 1:
+				arrows = ear.diagram.axiom1Arrows(graph, points[0], points[1]);
+				break;
+			case 2:
+				arrows = ear.diagram.axiom2Arrows(graph, points[0], points[1]);
+				break;
+			case 3:
+				const allArrows = ear.diagram.axiom3Arrows(graph, lines[0], lines[1]);
+				arrows.push(allArrows[index]);
+				break;
+			case 4:
+				arrows = ear.diagram.axiom4Arrows(graph, lines[0], points[0]);
+				break;
+			default: break;
+		}
+		arrows = arrows.filter(a => a !== undefined);
+		if (assignment === "F") {
+			arrows.forEach(arrow => { arrow.tail = arrow.head; });
+		}
+		return arrows
+	} catch (err) {
+		console.error(err);
+		return [];
+	}
+};
+
 export const DiagramArrows = derived(
 	[DiagramInfo, FoldedForm],
 	([$DiagramInfo, $FoldedForm]) => {
-		// console.log($DiagramInfo);
-		if ($DiagramInfo.axiom === undefined) { return []; }
-		try {
-			const { points, vertices, lines, edges } = $DiagramInfo.params;
-			switch ($DiagramInfo.axiom) {
-				case 1: return ear.diagram.axiom1Arrows($FoldedForm, points[0], points[1])
-					.filter(a => a !== undefined);
-				case 2: return ear.diagram.axiom2Arrows($FoldedForm, points[0], points[1])
-					.filter(a => a !== undefined);
-				case 3: return ear.diagram.axiom3Arrows($FoldedForm, lines[0], lines[1])
-					.filter(a => a !== undefined);
-				case 4: return ear.diagram.axiom4Arrows($FoldedForm, lines[0], points[0])
-					.filter(a => a !== undefined);
-				default: return [];
-			}
-		} catch (error) {
-			return [];
-		}
+		if (!$DiagramInfo || !$DiagramInfo.params) { return []; }
+		const { axiom, assignment } = $DiagramInfo;
+		const params = $DiagramInfo.params;
+		return axiom === undefined
+			? []
+			: getAxiomArrow($FoldedForm, axiom, params, assignment);
 	},
 	[],
 );

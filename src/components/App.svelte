@@ -12,7 +12,7 @@
 <style>
 	:root {
 		/* --chroma-key: #080; */
-		--chroma-key: transparent;
+		--chroma-key: #0002;
 		--color1: #ddd;
 		--color2: #e53;
 		--color3: #eee;
@@ -28,7 +28,7 @@
 	}
 
 	.left-side {
-		width: 33vw; /* 17vw; */
+		width: 30vw; /* 17vw; */
 		height: 100%;
 		background-color: transparent;
 		padding: 3vmin 1vmin;

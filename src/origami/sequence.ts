@@ -1,68 +1,99 @@
 import ear from "rabbit-ear";
+import { type FOLD, type VecLine2 } from "rabbit-ear/types.js";
+import { type AxiomParams, type AxiomDef } from "../types.ts";
+
 // import type { SplitGraphEvent } from "rabbit-ear/graph/split/splitGraph.js";
 
 const file_spec = 1.2;
 const file_creator = "Rabbit Ear";
 
-const clipLineInGraph = (graph, line) => {
-	const polygon = ear.math.convexHull(graph.vertices_coords)
-		.map(i => graph.vertices_coords[i]);
+const clipLineInGraph = (graph: FOLD, line: VecLine2): [number, number][] | undefined => {
+	if (!graph.vertices_coords) { return; }
+	const vertices_coords2 = graph.vertices_coords.map(ear.math.resize2);
+	const polygon = ear.math.convexHull(vertices_coords2)
+		.map(i => vertices_coords2[i]);
 	return ear.math.clipLineConvexPolygon(polygon, line);
 };
 
-const randomAxiom1 = (graph, vertices) => {
-	const points = vertices.map(v => graph.vertices_coords[v]);
+/**
+ * @description Given an array of values with some undefineds,
+ * make a list of all indices in "array" which are valid (not undefined),
+ * and choose one index from the list, return the index, not the value
+ * of the array at that index.
+ * @returns {number} the index of a valid location inside "array",
+ * or "undefined" if the array only contains undefineds.
+ */
+const getRandomValidIndex = (array: any[]): number => {
+	const validIndices = array
+		.map((_, i) => i)
+		.filter(i => array[i] !== undefined);
+	return validIndices[Math.floor(Math.random() * validIndices.length)];
+};
+
+const randomAxiom1 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined => {
+	if (!graph.vertices_coords) { return; }
+	const { points: pts } = params;
+	// randomly choose two points
+	const points = [pts[0], pts[1]];
 	const line = ear.axiom.validAxiom1(graph, points[0], points[1]).shift();
-	const segment = line ? clipLineInGraph(graph, line) : undefined;
+	const result = line
+		? { line, segment: clipLineInGraph(graph, line) }
+		: undefined;
 	return ({
 		axiom: 1,
-		params: {
-			vertices,
-			points,
-		},
-		line,
-		segment,
+		params: { points },
+		result,
 	});
 };
 
-const randomAxiom2 = (graph, vertices) => {
-	const points = vertices.map(v => graph.vertices_coords[v]);
+const randomAxiom2 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined => {
+	if (!graph.vertices_coords) { return; }
+	const { points: pts } = params;
+	// randomly choose two points
+	const points = [pts[0], pts[1]];
 	const line = ear.axiom.validAxiom2(graph, points[0], points[1]).shift();
-	const segment = line ? clipLineInGraph(graph, line) : undefined;
+	const result = line
+		? { line, segment: clipLineInGraph(graph, line) }
+		: undefined;
 	return ({
 		axiom: 2,
-		params: {
-			vertices,
-			points,
-		},
-		line,
-		segment,
+		params: { points },
+		result,
 	});
 };
 
-const randomAxiom3 = (graph, lines) => {
-	const solutions = ear.axiom.validAxiom3(graph, lines[0], lines[1])
-		.filter(a => a !== undefined);
-	const index = Math.floor(Math.random() * solutions.length);
+const randomAxiom3 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined => {
+	const { lines: ln } = params;
+	// randomly choose two lines
+	const lines = [ln[0], ln[1]];
+	const solutions = ear.axiom.validAxiom3(graph, lines[0], lines[1]);
+	const index = getRandomValidIndex(solutions);
+	if (index === undefined) { return; }
 	const line = solutions[index];
-	const segment = line ? clipLineInGraph(graph, line) : undefined;
+	const result = line
+		? { line, segment: clipLineInGraph(graph, line) }
+		: undefined;
 	return {
 		axiom: 3,
-		params: { lines: [lines[0], lines[1]] },
-		line,
-		segment,
+		params: { lines, index },
+		result,
 	};
 };
 
-const randomAxiom4 = (graph, lines, vertices) => {
-	const points = vertices.map(v => graph.vertices_coords[v]);
+const randomAxiom4 = (graph: FOLD, params: AxiomParams) => {
+	if (!graph.vertices_coords) { return; }
+	const { points: pts, lines: ln } = params;
+	// randomly choose a line and a point
+	const lines = [ln[0]];
+	const points = [pts[0]];
 	const line = ear.axiom.validAxiom4(graph, lines[0], points[0]).shift();
-	const segment = line ? clipLineInGraph(graph, line) : undefined;
+	const result = line
+		? { line, segment: clipLineInGraph(graph, line) }
+		: undefined;
 	return ({
 		axiom: 4,
-		params: { lines: [lines[0]], points: [points[0]] },
-		line,
-		segment,
+		params: { lines, points },
+		result,
 	});
 };
 
@@ -78,7 +109,30 @@ const randomAxiom4 = (graph, lines, vertices) => {
 // 	];
 // };
 
-const makeRandomFold = (graph, vertices_coordsFolded) => {
+/**
+ * @param {FOLD} graph a FOLD graph in folded form
+ */
+const getInterestingLandmarks = (graph: FOLD) => {
+	// point info
+	const clusters_vertices = ear.graph.getVerticesClusters(graph)
+		.sort((a, b) => b.length - a.length);
+	const vertices = clusters_vertices.map(([first]) => first);
+	const points = vertices.map(vert => graph.vertices_coords[vert])
+		.map(ear.math.resize2);
+
+	// line info
+	const { lines, edges_line } = ear.graph.getEdgesLine(graph);
+	const lines_edges = ear.graph.invertFlatToArrayMap(edges_line);
+	const linesSortedIndices = lines
+		.map((_, i) => i)
+		.sort((a, b) => lines_edges[b].length - lines_edges[a].length)
+	// const edgesSorted = linesSortedIndices.map(l => lines_edges[l]);
+	const linesSorted = linesSortedIndices.map(l => lines[l]);
+
+	return { points, lines: linesSorted };
+};
+
+const makeRandomFold = (graph: FOLD, vertices_coordsFolded: [number, number][] | [number, number, number][]) => {
 	if (!vertices_coordsFolded) {
 		vertices_coordsFolded = ear.graph.makeVerticesCoordsFlatFolded(graph);
 	}
@@ -87,37 +141,29 @@ const makeRandomFold = (graph, vertices_coordsFolded) => {
 		vertices_coords: vertices_coordsFolded,
 	};
 
-	// point info
-	const clusters_vertices = ear.graph.getVerticesClusters(folded)
-		.sort((a, b) => b.length - a.length);
-	const vertices = clusters_vertices.map(([first]) => first);
-	const points = vertices.map(vert => folded.vertices_coords[vert]);
+	const params = getInterestingLandmarks(folded);
 
-	// line info
-	const { lines, edges_line } = ear.graph.getEdgesLine(folded);
-	const lines_edges = ear.graph.invertFlatToArrayMap(edges_line);
-	const linesSorted = lines
-		.map((_, i) => i)
-		.sort((a, b) => lines_edges[b].length - lines_edges[a].length)
-		.map(l => lines[l]);
-
-	const solution1 = randomAxiom1(folded, vertices);
-	const solution2 = randomAxiom2(folded, vertices);
-	const solution3 = randomAxiom3(folded, linesSorted);
-	const solution4 = randomAxiom4(folded, linesSorted, vertices);
+	const solution1 = randomAxiom1(folded, params);
+	const solution2 = randomAxiom2(folded, params);
+	const solution3 = randomAxiom3(folded, params);
+	const solution4 = randomAxiom4(folded, params);
 
 	const definedSolutions = [
 		solution1,
 		solution2,
 		solution3,
 		solution4,
-	].filter(({ line }) => line !== undefined);
+	].filter(el => el !== undefined && el.result !== undefined);
+
+	// console.log("definedSolutions", definedSolutions);
 
 	// todo: can create a convex hull, single face, intersect with the
 	// single face, if the face is split into two we have a valid overlap.
 	// i think.
 	const defineSolutionsSplits = definedSolutions
-		.map(({ line }) => ear.graph.splitGraphWithLine(structuredClone(folded), line));
+		.map(({ result }) => ear.graph.splitGraphWithLine(structuredClone(folded), result.line));
+
+	// console.log("defineSolutionsSplits", defineSolutionsSplits);
 
 	// const defineSolutionSegmentParams = defineSolutionsSplits
 	// 	.map(splitInfoToSegmentParams);
@@ -137,12 +183,12 @@ const makeRandomFold = (graph, vertices_coordsFolded) => {
 	const randomIndex = Math.floor(Math.random() * validSolutions.length);
 	const randomSolution = validSolutions[randomIndex];
 
-	if (!randomSolution || !randomSolution.line) { return undefined; }
+	if (!randomSolution || !randomSolution.result) { return undefined; }
 
 	// random F, M, or V
 	const assignment = Array.from("MVF")[Math.floor(Math.random() * 3)];
 
-	ear.graph.foldLine(graph, randomSolution.line, {
+	ear.graph.foldLine(graph, randomSolution.result.line, {
 		assignment,
 		// foldAngle,
 		vertices_coordsFolded,
