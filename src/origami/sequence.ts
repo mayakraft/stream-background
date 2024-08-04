@@ -1,6 +1,13 @@
 import ear from "rabbit-ear";
 import { type FOLD, type VecLine2 } from "rabbit-ear/types.js";
-import { type AxiomParams, type AxiomDef } from "../types.ts";
+import { type AxiomDef } from "../types.ts";
+
+type LandmarkInformation = {
+	points: [number, number][],
+	lines: VecLine2[],
+	points_counts: number[],
+	lines_counts: number[],
+};
 
 // import type { SplitGraphEvent } from "rabbit-ear/graph/split/splitGraph.js";
 
@@ -13,6 +20,46 @@ const clipLineInGraph = (graph: FOLD, line: VecLine2): [number, number][] | unde
 	const polygon = ear.math.convexHull(vertices_coords2)
 		.map(i => vertices_coords2[i]);
 	return ear.math.clipLineConvexPolygon(polygon, line);
+};
+
+/**
+ * @description Given a foldedForm FOLD object, find all "interesting"
+ * landmarks suitable for input to a fold operation like an origami axiom.
+ * The vertices and edges are clustered into points and lines, with
+ * information regarding the number of vertices/edges sharing this location.
+ * This can be done on a creasePattern, but the weights will all be uniform
+ * and meaningless.
+ * @param {FOLD} graph a FOLD graph in folded form
+ * @returns {{
+ *   points: [number, number][],
+ *   lines: VecLine2,
+ *   points_counts: number[],
+ *   lines_counts: number[],
+ * }} points and lines, and each entry's corresponding weight (number of
+ * times it appears in the model).
+ */
+const getInterestingLandmarks = (graph: FOLD): LandmarkInformation => {
+	// point info
+	const clusters_vertices = ear.graph.getVerticesClusters(graph)
+		.sort((a, b) => b.length - a.length);
+	const points = clusters_vertices
+		.map(([first]) => first)
+		.map(vert => graph.vertices_coords[vert])
+		.map(ear.math.resize2);
+	const points_counts = clusters_vertices.map(arr => arr.length);
+
+	// line info
+	const { lines: uniqueLines, edges_line } = ear.graph.getEdgesLine(graph);
+	const lines_edges = ear.graph.invertFlatToArrayMap(edges_line);
+	const clusters_edges = uniqueLines
+		.map((_, i) => i)
+		.sort((a, b) => lines_edges[b].length - lines_edges[a].length)
+		.map(i => lines_edges[i]);
+	const lines = clusters_edges
+		.map(([first]) => uniqueLines[edges_line[first]]);
+	const lines_counts = clusters_edges.map(arr => arr.length);
+
+	return { points, lines, points_counts, lines_counts };
 };
 
 /**
@@ -30,11 +77,37 @@ const getRandomValidIndex = (array: any[]): number => {
 	return validIndices[Math.floor(Math.random() * validIndices.length)];
 };
 
-const randomAxiom1 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined => {
+// const getRandomWeightedElements = (array: any[], arrayWeight: number[], count: number) => {
+
+const shuffle = (array: any[]) => {
+	let index = array.length;
+	while (index != 0) {
+		let randomIndex = Math.floor(Math.random() * index);
+		index--;
+		[array[index], array[randomIndex]] = [array[randomIndex], array[index]];
+	}
+}
+
+const getRandomWeightedIndices = (arrayWeight: number[]) => {
+	const weightSum = arrayWeight.reduce((a, b) => a + b, 0);
+	const arrayMap: number[] = Array.from(Array(weightSum));
+	let counter = 0;
+	arrayWeight.forEach((weight, i) => Array
+		.from(Array(weight))
+		.forEach(() => { arrayMap[counter++] = i; }));
+	shuffle(arrayMap);
+	return Array.from(new Set(arrayMap));
+};
+
+const randomAxiom1 = (graph: FOLD, params: LandmarkInformation): AxiomDef | undefined => {
 	if (!graph.vertices_coords) { return; }
-	const { points: pts } = params;
+	const { points: pts, points_counts } = params;
+
 	// randomly choose two points
-	const points = [pts[0], pts[1]];
+	const points = getRandomWeightedIndices(points_counts)
+		.slice(0, 2)
+		.map(i => pts[i]);
+
 	const line = ear.axiom.validAxiom1(graph, points[0], points[1]).shift();
 	const result = line
 		? { line, segment: clipLineInGraph(graph, line) }
@@ -46,11 +119,14 @@ const randomAxiom1 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined =>
 	});
 };
 
-const randomAxiom2 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined => {
+const randomAxiom2 = (graph: FOLD, params: LandmarkInformation): AxiomDef | undefined => {
 	if (!graph.vertices_coords) { return; }
-	const { points: pts } = params;
+	const { points: pts, points_counts } = params;
 	// randomly choose two points
-	const points = [pts[0], pts[1]];
+	const points = getRandomWeightedIndices(points_counts)
+		.slice(0, 2)
+		.map(i => pts[i]);
+
 	const line = ear.axiom.validAxiom2(graph, points[0], points[1]).shift();
 	const result = line
 		? { line, segment: clipLineInGraph(graph, line) }
@@ -62,10 +138,13 @@ const randomAxiom2 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined =>
 	});
 };
 
-const randomAxiom3 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined => {
-	const { lines: ln } = params;
-	// randomly choose two lines
-	const lines = [ln[0], ln[1]];
+const randomAxiom3 = (graph: FOLD, params: LandmarkInformation): AxiomDef | undefined => {
+	const { lines: ln, lines_counts } = params;
+	// randomly choose two points
+	const lines = getRandomWeightedIndices(lines_counts)
+		.slice(0, 2)
+		.map(i => ln[i]);
+
 	const solutions = ear.axiom.validAxiom3(graph, lines[0], lines[1]);
 	const index = getRandomValidIndex(solutions);
 	if (index === undefined) { return; }
@@ -80,12 +159,17 @@ const randomAxiom3 = (graph: FOLD, params: AxiomParams): AxiomDef | undefined =>
 	};
 };
 
-const randomAxiom4 = (graph: FOLD, params: AxiomParams) => {
+const randomAxiom4 = (graph: FOLD, params: LandmarkInformation): AxiomDef | undefined => {
 	if (!graph.vertices_coords) { return; }
-	const { points: pts, lines: ln } = params;
+	const { points: pts, lines: ln, points_counts, lines_counts } = params;
 	// randomly choose a line and a point
-	const lines = [ln[0]];
-	const points = [pts[0]];
+	const lines = getRandomWeightedIndices(lines_counts)
+		.slice(0, 1)
+		.map(i => ln[i]);
+	const points = getRandomWeightedIndices(points_counts)
+		.slice(0, 1)
+		.map(i => pts[i]);
+
 	const line = ear.axiom.validAxiom4(graph, lines[0], points[0]).shift();
 	const result = line
 		? { line, segment: clipLineInGraph(graph, line) }
@@ -109,29 +193,6 @@ const randomAxiom4 = (graph: FOLD, params: AxiomParams) => {
 // 	];
 // };
 
-/**
- * @param {FOLD} graph a FOLD graph in folded form
- */
-const getInterestingLandmarks = (graph: FOLD) => {
-	// point info
-	const clusters_vertices = ear.graph.getVerticesClusters(graph)
-		.sort((a, b) => b.length - a.length);
-	const vertices = clusters_vertices.map(([first]) => first);
-	const points = vertices.map(vert => graph.vertices_coords[vert])
-		.map(ear.math.resize2);
-
-	// line info
-	const { lines, edges_line } = ear.graph.getEdgesLine(graph);
-	const lines_edges = ear.graph.invertFlatToArrayMap(edges_line);
-	const linesSortedIndices = lines
-		.map((_, i) => i)
-		.sort((a, b) => lines_edges[b].length - lines_edges[a].length)
-	// const edgesSorted = linesSortedIndices.map(l => lines_edges[l]);
-	const linesSorted = linesSortedIndices.map(l => lines[l]);
-
-	return { points, lines: linesSorted };
-};
-
 const makeRandomFold = (graph: FOLD, vertices_coordsFolded: [number, number][] | [number, number, number][]) => {
 	if (!vertices_coordsFolded) {
 		vertices_coordsFolded = ear.graph.makeVerticesCoordsFlatFolded(graph);
@@ -141,12 +202,12 @@ const makeRandomFold = (graph: FOLD, vertices_coordsFolded: [number, number][] |
 		vertices_coords: vertices_coordsFolded,
 	};
 
-	const params = getInterestingLandmarks(folded);
+	const landmarks = getInterestingLandmarks(folded);
 
-	const solution1 = randomAxiom1(folded, params);
-	const solution2 = randomAxiom2(folded, params);
-	const solution3 = randomAxiom3(folded, params);
-	const solution4 = randomAxiom4(folded, params);
+	const solution1 = randomAxiom1(folded, landmarks);
+	const solution2 = randomAxiom2(folded, landmarks);
+	const solution3 = randomAxiom3(folded, landmarks);
+	const solution4 = randomAxiom4(folded, landmarks);
 
 	const definedSolutions = [
 		solution1,

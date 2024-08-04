@@ -1,15 +1,17 @@
 <script lang="ts">
 	import Origami from "./Origami.svelte";
+	import { ShowDiagramInfo } from "../stores/App.ts";
 	import {
 		StepNumber,
 		NumberOfSteps,
-		ShowDiagramInfo,
-		DiagramLines,
-		DiagramArrows,
 		CreasePattern,
 		FoldedForm,
-		DiagramInstructions,
 	} from "../stores/Model.ts";
+	import {
+		DiagramLines,
+		DiagramArrows,
+		DiagramInstructions,
+	} from "../stores/Diagram.ts";
 
 	const stepNumber = $derived(`Step ${$StepNumber + 1}`);
 

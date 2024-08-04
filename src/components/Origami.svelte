@@ -11,6 +11,7 @@
 			container.removeChild(container.children[0]);
 		}
 		const svg = ear.convert.foldToSvg(Fold, options) as SVGElement;
+		if (!svg) { return; }
 		container.appendChild(svg);
 
 		const viewBox = svg.getAttribute("viewBox").split(" ").map(parseFloat);
