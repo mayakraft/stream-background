@@ -249,7 +249,7 @@ const makeRandomFold = (graph: FOLD, vertices_coordsFolded: [number, number][] |
 	// random F, M, or V
 	const assignment = Array.from("MVF")[Math.floor(Math.random() * 3)];
 
-	ear.graph.foldLine(graph, randomSolution.result.line, {
+	ear.graph.simpleFoldLine(graph, randomSolution.result.line, {
 		assignment,
 		// foldAngle,
 		vertices_coordsFolded,
@@ -318,3 +318,30 @@ export const makeSequence = (numSteps = 6) => {
 		file_frames,
 	};
 };
+
+/**
+ *
+ */
+export const dipatchNewSequence = async ({ numSteps = 6 } = {}) => (
+	new Promise((resolve, reject) => {
+		// const worker = new Worker("./worker.js");
+		const worker = new Worker(
+			new URL("./dispatch.js", import.meta.url),
+			{ type: "module", name: "sequence generator dispatcher" },
+		);
+		worker.addEventListener("message", resolve);
+		worker.addEventListener("error", reject);
+		worker.postMessage({ numSteps });
+	}));
+
+// export const makeSequenceThreaded = ({ numSteps = 6 } = {}, callback) => {
+// 	// const worker = new Worker("./worker.js");
+// 	const worker = new Worker(
+// 		new URL("./worker.js", import.meta.url),
+// 		{ type: "module", name: "origami sequence generator" },
+// 	);
+// 	worker.addEventListener("message", callback);
+// 	worker.addEventListener("error", callback);
+
+// 	worker.postMessage({ numSteps });
+// };
